@@ -4,17 +4,46 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from std_msgs.msg import String
 import math
 
 class MotherBrainNode(Node):
     def __init__(self):
         super().__init__('mother_brain_node')
 
+        self.FORMATIONS = {
+            'triangle': {
+                'child_1': [-1.5,  1.5, 0.0, 0.0],  # Back left
+                'child_2': [-1.5, -1.5, 0.0, 0.0],  # Back right
+                'child_3': [-3.0,  0.0, 0.0, 0.0]   # Straight back
+            },
+            'line': {
+                'child_1': [0.0,  2.5, 0.0, 0.0],  # Far Left Wing
+                'child_2': [0.0, -2.5, 0.0, 0.0],  # Far Right Wing
+                'child_3': [0.0,  5.0, 0.0, 0.0]   # Outer Left Wing
+            },
+            'column': {
+                'child_1': [-2.0, 0.0, 0.0, 0.0],  # Single file 1st
+                'child_2': [-4.0, 0.0, 0.0, 0.0],  # Single file 2nd
+                'child_3': [-6.0, 0.0, 0.0, 0.0]   # Single file 3rd
+            },
+            'diamond': {
+                'child_1': [-2.0,  2.0, 0.0, 0.0],  # Left Corner
+                'child_2': [-2.0, -2.0, 0.0, 0.0],  # Right Corner
+                'child_3': [-4.0,  0.0, 0.0, 0.0]   # Rear Point
+            },
+            'pyramid': {
+                'child_1': [-1.5,  1.5,  1.0, 0.0],  # High Left Tier
+                'child_2': [-1.5, -1.5,  1.0, 0.0],  # High Right Tier
+                'child_3': [-3.0,  0.0,  2.0, 0.0]   # Peak Rear Tier
+            }
+        }
+
         
         self.formation_offsets = {
-            'child_1': [-1.5,  1.5, 0.0, 0.0],  # [x, y, z, yaw]
-            'child_2': [-1.5, -1.5, 0.0, 0.0],  
-            'child_3': [-3.0,  0.0, 0.0, 0.0]   
+            'child_1': list(self.FORMATIONS['triangle']['child_1']),
+            'child_2': list(self.FORMATIONS['triangle']['child_2']),
+            'child_3': list(self.FORMATIONS['triangle']['child_3'])
         }
 
         self.mother_state = {'x': 0.0, 'y': 0.0, 'z': 0.0, 'yaw': 0.0}
@@ -44,13 +73,30 @@ class MotherBrainNode(Node):
                 10
             )
 
+        self.create_subscription(
+            String,
+            '/swarm/select_formation',
+            self.formation_switch_callback,
+            10
+        )
+
+        # self.mother_pub = self.create_publisher(Twist, '/model/mother/cmd_vel', 10)
+        # self.mother_target_z = 0.5
+
         self.child_pubs = {}
         for child in self.formation_offsets.keys():
             self.child_pubs[child] = self.create_publisher(Twist, f'/model/{child}/cmd_vel', 10)
 
         self.timer = self.create_timer(0.05, self.master_control_loop)
-        self.get_logger().info('Centralized Dynamic Swarm Brain Armed. Individual offset channels active.')
+        self.get_logger().info('Swarm Brain Started.')
 
+
+    def formation_switch_callback(self, msg):
+        fmt_name = msg.data.lower().strip()
+        if fmt_name in self.FORMATIONS:
+            preset = self.FORMATIONS[fmt_name]
+            for child in self.formation_offsets.keys():
+                self.formation_offsets[child] = list(preset[child])
     
     def mother_odom_callback(self, msg):
         self.mother_state['x'] = msg.pose.pose.position.x
