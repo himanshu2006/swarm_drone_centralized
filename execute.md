@@ -8,6 +8,14 @@ cd ~/swarm_ws
 source install/setup.bash
 ros2 run swarm_control swarm_brain
 
+
+
+cd ~/swarm_ws
+source install/setup.bash
+ros2 run swarm_control box_detector
+
+
+
 ros2 topic pub --once /swarm/select_formation std_msgs/msg/String "data: 'line'"
 ros2 topic pub --once /swarm/select_formation std_msgs/msg/String "data: 'column'"
 ros2 topic pub --once /swarm/select_formation std_msgs/msg/String "data: 'pyramid'"

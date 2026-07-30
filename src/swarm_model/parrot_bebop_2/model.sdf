@@ -7,8 +7,8 @@
     <!-- Main link -->
     <link name="body">
       <inertial>
-        <mass>0.503</mass> <!-- kg -->
-        <inertia> <!-- kg.m^2 -->
+        <mass>0.503</mass>
+        <inertia>
           <ixx>1.805e-3</ixx>
           <ixy>-8.619e-7</ixy>
           <iyy>1.764e-3</iyy>
@@ -18,6 +18,7 @@
         </inertia>
         <pose>0 0 0 0 0 0</pose>
       </inertial>
+
       <collision name="collision">
         <pose>-0.00424 0.00014 -0.00595 0 0 0</pose>
         <geometry>
@@ -48,13 +49,15 @@
           </contact>
         </surface>
       </collision>
+
       <visual name="hull">
         <geometry>
           <mesh>
-              <uri>model://parrot_bebop_2/meshes/hull.dae</uri>
+            <uri>model://parrot_bebop_2/meshes/hull.dae</uri>
           </mesh>
         </geometry>
       </visual>
+
       <visual name="propeller_rr">
         <pose>-0.09035 -0.11423 -0.00501 0 0 0</pose>
         <geometry>
@@ -63,6 +66,7 @@
           </mesh>
         </geometry>
       </visual>
+
       <visual name="propeller_rl">
         <pose>-0.09035 0.11452 -0.00501 0 0 0</pose>
         <geometry>
@@ -71,6 +75,7 @@
           </mesh>
         </geometry>
       </visual>
+
       <visual name="propeller_fr">
         <pose>0.08456 -0.11435 -0.00501 0 0 0</pose>
         <geometry>
@@ -79,6 +84,7 @@
           </mesh>
         </geometry>
       </visual>
+
       <visual name="propeller_fl">
         <pose>0.08456 0.11463 -0.00501 0 0 0</pose>
         <geometry>
@@ -87,7 +93,52 @@
           </mesh>
         </geometry>
       </visual>
-    </link>
+
+      <!-- 1. REALSENSE RGB COLOR SENSOR -->
+      <sensor name="realsense_rgb" type="camera">
+        <pose>0.15 0 0 0 0 0</pose>
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <visualize>true</visualize>
+        <!-- DELETED THE TOPIC TAG HERE -->
+        <camera>
+          <horizontal_fov>1.50098</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.1</near>
+            <far>10.0</far>
+          </clip>
+        </camera>
+      </sensor>
+
+      <!-- 2. REALSENSE DEPTH SENSOR -->
+      <sensor name="realsense_depth" type="depth_camera">
+        <pose>0.15 0 0 0 0 0</pose>
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <visualize>true</visualize>
+        <!-- DELETED THE TOPIC TAG HERE -->
+        <camera>
+          <horizontal_fov>1.50098</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>R_FLOAT32</format>
+          </image>
+          <clip>
+            <near>0.1</near>
+            <far>10.0</far>
+          </clip>
+        </camera>
+      </sensor>
+
+    </link> <!-- THIS CLOSING TAG WAS MISSING! -->
+
+    <!-- IGNITION GAZEBO PLUGINS -->
     <plugin
       filename="ignition-gazebo-velocity-control-system"
       name="ignition::gazebo::systems::VelocityControl">
@@ -101,5 +152,6 @@
       <odom_frame>odom</odom_frame>
       <robot_base_frame>body</robot_base_frame>
     </plugin>
+
   </model>
 </sdf>

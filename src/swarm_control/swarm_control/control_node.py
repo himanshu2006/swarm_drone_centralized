@@ -5,6 +5,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from std_msgs.msg import String
+from std_msgs.msg import Bool
+from geometry_msgs.msg import PointStamped
 import math
 
 class MotherBrainNode(Node):
@@ -55,7 +57,24 @@ class MotherBrainNode(Node):
             'child_3': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'yaw': 0.0}
         }
 
+        self.orbit_mode = False
+        self.box_state = {'x': 5.0, 'y': 0.0, 'z': 0.5}  # Matches target_box pose in swarm_world.sdf
+        self.orbit_radius = 2.5
+        self.orbit_speed = 0.5
+        self.child_phases = {
+            'child_1': 0.0,
+            'child_2': (2.0 * math.pi) / 3.0,
+            'child_3': (4.0 * math.pi) / 3.0
+        }
+
         self.create_subscription(Odometry, '/model/mother/odometry', self.mother_odom_callback, 10)
+
+        self.create_subscription(
+    PointStamped,
+    '/swarm/target_3d_position',
+    self.target_3d_callback,
+    10
+)
         
         for child in self.formation_offsets.keys():
             self.create_subscription(
@@ -80,6 +99,15 @@ class MotherBrainNode(Node):
             10
         )
 
+        self.create_subscription(
+            Bool,
+            '/swarm/box_visual_detection',
+            self.visual_detection_callback,
+            10
+        )
+
+        
+
         # self.mother_pub = self.create_publisher(Twist, '/model/mother/cmd_vel', 10)
         # self.mother_target_z = 0.5
 
@@ -91,6 +119,43 @@ class MotherBrainNode(Node):
         self.get_logger().info('Swarm Brain Started.')
 
 
+    def target_3d_callback(self, msg):
+        # 1. Identify which drone's camera saw the box
+        drone_id = msg.header.frame_id.replace('_realsense', '')
+        
+        # 2. Get the exact global position and yaw of THAT specific drone
+        if drone_id == 'mother':
+            dx, dy, dyaw = self.mother_state['x'], self.mother_state['y'], self.mother_state['yaw']
+        elif drone_id in self.children_state:
+            dx, dy, dyaw = self.children_state[drone_id]['x'], self.children_state[drone_id]['y'], self.children_state[drone_id]['yaw']
+        else:
+            return
+
+        # 3. Read the local RealSense vector (Z is forward distance, X is horizontal shift)
+        local_forward = msg.point.z
+        local_right = msg.point.x
+
+        # 4. Apply 2D Rotation Matrix to find the box's True Global Coordinates
+        global_box_x = dx + (local_forward * math.cos(dyaw) - local_right * math.sin(dyaw))
+        global_box_y = dy + (local_forward * math.sin(dyaw) + local_right * math.cos(dyaw))
+
+        # 5. Update the swarm's orbit center smoothly
+        # Using a slight low-pass filter (0.1) so the orbit center doesn't jitter from CNN noise
+        self.box_state['x'] += 0.1 * (global_box_x - self.box_state['x'])
+        self.box_state['y'] += 0.1 * (global_box_y - self.box_state['y'])
+
+    def visual_detection_callback(self, msg):
+        box_seen = msg.data
+        
+        # If camera sees the box and we are NOT in orbit mode -> START ORBIT
+        if box_seen and not self.orbit_mode:
+            self.orbit_mode = True
+            
+        # If box disappears from camera view and we ARE in orbit mode -> REJOIN
+        elif not box_seen and self.orbit_mode:
+            self.orbit_mode = False
+
+           
     def formation_switch_callback(self, msg):
         fmt_name = msg.data.lower().strip()
         if fmt_name in self.FORMATIONS:
@@ -143,18 +208,36 @@ class MotherBrainNode(Node):
     def master_control_loop(self):
         Kp = 2.5
         Kp_yaw = 2.0 
-        
+
+
+        current_time = self.get_clock().now().nanoseconds / 1e9
+
         xm, ym, zm, yaw = self.mother_state['x'], self.mother_state['y'], self.mother_state['z'], self.mother_state['yaw']
 
         for child, offset in self.formation_offsets.items():
-            
-            
-            target_x = xm + (offset[0] * math.cos(yaw) - offset[1] * math.sin(yaw))
-            target_y = ym + (offset[0] * math.sin(yaw) + offset[1] * math.cos(yaw))
-            target_z = zm + offset[2] + 0.5 
-            
-            
-            target_yaw = yaw + offset[3] 
+
+
+
+            if self.orbit_mode:
+                # --- STATE A: ORBITING TARGET BOX ---
+                phase = self.child_phases[child]
+                angle = (self.orbit_speed * current_time) + phase
+
+                target_x = self.box_state['x'] + (self.orbit_radius * math.cos(angle))
+                target_y = self.box_state['y'] + (self.orbit_radius * math.sin(angle))
+                target_z = self.box_state['z'] + 1.2  # Altitude ceiling above box base
+
+                # Turn drone nose inward toward the box center
+                dx_box = self.box_state['x'] - self.children_state[child]['x']
+                dy_box = self.box_state['y'] - self.children_state[child]['y']
+                target_yaw = math.atan2(dy_box, dx_box)
+
+            else:
+                # --- STATE B: REGULAR MOTHER FORMATION FOLLOW ---
+                target_x = xm + (offset[0] * math.cos(yaw) - offset[1] * math.sin(yaw))
+                target_y = ym + (offset[0] * math.sin(yaw) + offset[1] * math.cos(yaw))
+                target_z = zm + offset[2] + 0.5 
+                target_yaw = yaw + offset[3]
 
             
             err_x_global = target_x - self.children_state[child]['x']

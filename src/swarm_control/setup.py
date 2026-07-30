@@ -29,6 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             'swarm_brain = swarm_control.control_node:main',
+            'box_detector = swarm_control.box_detector:main',
         ],
     },
 )
